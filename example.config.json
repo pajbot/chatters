@@ -1,0 +1,8 @@
+{
+    "streams": [
+        {
+            "streamer": "pajlada",
+            "dsn": "stream:password@/test_pajbot"
+        }
+    ]
+}
