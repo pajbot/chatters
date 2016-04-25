@@ -54,7 +54,11 @@ func httpRequest(url string) ([]byte, error) {
 }
 
 func handleUsers(sql_tx *sql.Tx, redis_tx *redis.Multi, stream Stream, usernames []string) {
-	interval := 5
+	// The script is currently set to run every 10 minutes
+	interval := 10
+	base_points := 2
+	base_sub_points := 10
+
 	now := time.Now().Unix()
 	last_seen_key := fmt.Sprintf("%s:users:last_seen", stream.Streamer)
 
@@ -79,7 +83,15 @@ func handleUsers(sql_tx *sql.Tx, redis_tx *redis.Multi, stream Stream, usernames
 		// Set last seen
 		redis_tx.HSet(last_seen_key, username, strconv.FormatInt(now, 10))
 
-		points_to_give := 1
+		points_to_give := 0
+
+		if stream.Online {
+			points_to_give = base_points
+
+			if subscriber == 1 {
+				points_to_give = base_sub_points
+			}
+		}
 
 		if new {
 			_, err := sql_tx.Exec(
@@ -95,9 +107,6 @@ func handleUsers(sql_tx *sql.Tx, redis_tx *redis.Multi, stream Stream, usernames
 				log.Fatal(err)
 			}
 		} else {
-			if subscriber == 1 {
-				points_to_give = 5
-			}
 
 			// TODO: Punish trump subs
 			_, err := sql_tx.Exec(
