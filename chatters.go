@@ -140,7 +140,11 @@ func handleStream(stream Stream) {
 		return
 	}
 	var chatters ChattersList
-	json.Unmarshal(resp, &chatters)
+	err = json.Unmarshal(resp, &chatters)
+	if err != nil {
+		log.Error(err)
+		return
+	}
 
 	// Initialize database transaction
 	sql_tx, err := stream.db.Begin()
@@ -187,7 +191,10 @@ func main() {
 		log.Fatal(err)
 	}
 	var config Config
-	json.Unmarshal(file, &config)
+	err = json.Unmarshal(file, &config)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(config.Streams))
