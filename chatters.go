@@ -61,12 +61,48 @@ func handleUsers(sql_tx *sql.Tx, redis_tx *redis.Multi, stream Stream, usernames
 
 	now := time.Now().Unix()
 	last_seen_key := fmt.Sprintf("%s:users:last_seen", stream.Streamer)
+	viewer_data_key := fmt.Sprintf("%s:viewer_data", stream.Streamer)
 
 	minutes_in_chat_online := 0
 	minutes_in_chat_offline := 0
 
 	if stream.Online {
 		minutes_in_chat_online = interval
+
+		var stream_id int
+		err := sql_tx.QueryRow("SELECT id FROM tb_stream WHERE ended=0 LIMIT 1").Scan(&stream_id)
+		if err != nil {
+			log.Error(err)
+		} else {
+			stream_id_str := strconv.Itoa(stream_id)
+			current_stream_data, err := redis_tx.HGet(viewer_data_key, stream_id_str).Bytes()
+			if err != nil {
+				log.Error(err)
+			}
+
+			var streamData map[string]int
+
+			err = json.Unmarshal(current_stream_data, &streamData)
+			if err != nil {
+				streamData = make(map[string]int)
+			}
+
+			for _, username := range usernames {
+				val, ok := streamData[username]
+				if ok {
+					streamData[username] = val + interval
+				} else {
+					streamData[username] = interval
+				}
+			}
+
+			current_stream_data, err = json.Marshal(streamData)
+			if err != nil {
+				log.Error("marshal error", err)
+			} else {
+				redis_tx.HSet(viewer_data_key, stream_id_str, string(current_stream_data[:]))
+			}
+		}
 	} else {
 		minutes_in_chat_offline = interval
 	}
