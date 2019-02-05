@@ -4,15 +4,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/op/go-logging"
-	"gopkg.in/redis.v3"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
 	"sync"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/op/go-logging"
+	"gopkg.in/redis.v3"
 )
 
 var (
