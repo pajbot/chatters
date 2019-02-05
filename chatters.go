@@ -28,6 +28,9 @@ type Stream struct {
 	DataSourceName string `json:"dsn"`
 	db             *sql.DB
 	Online         bool
+
+	BasePoints       int `json:"base_points"`
+	BasePointsSubbed int `json:"base_points_subbed"`
 }
 
 type Config struct {
@@ -58,6 +61,14 @@ func handleUsers(sql_tx *sql.Tx, redis_tx *redis.Multi, stream Stream, usernames
 	interval := 10
 	base_points := 2
 	base_sub_points := 10
+
+	if stream.BasePoints > 0 {
+		base_points = stream.BasePoints
+	}
+
+	if stream.BasePointsSubbed > 0 {
+		base_sub_points = stream.BasePointsSubbed
+	}
 
 	now := time.Now().Unix()
 	last_seen_key := fmt.Sprintf("%s:users:last_seen", stream.Streamer)
