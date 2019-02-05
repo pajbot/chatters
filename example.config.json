@@ -2,7 +2,9 @@
     "streams": [
         {
             "streamer": "pajlada",
-            "dsn": "stream:password@/test_pajbot"
+            "dsn": "stream:password@/test_pajbot",
+            "base_points": 2,
+            "base_points_subbed": 5
         }
     ]
 }
