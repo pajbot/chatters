@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -32,6 +33,10 @@ type Stream struct {
 
 	BasePoints       int `json:"base_points"`
 	BasePointsSubbed int `json:"base_points_subbed"`
+
+	// OfflineChatPointRate specifies how fast offline chatters should gain points, if at all.
+	// 0.0 by default which means no points for offline chatters
+	OfflineChatPointRate float32 `json:"offline_chat_point_rate"`
 }
 
 type Config struct {
@@ -97,11 +102,16 @@ func handleUsers(sql_tx *sql.Tx, redis_tx *redis.Multi, stream Stream, usernames
 
 		points_to_give := 0
 
-		if stream.Online {
-			points_to_give = base_points
+		pointRate := base_points
+		if subscriber == 1 {
+			pointRate = base_sub_points
+		}
 
-			if subscriber == 1 {
-				points_to_give = base_sub_points
+		if stream.Online {
+			points_to_give = pointRate
+		} else {
+			if stream.OfflineChatPointRate > 0.01 {
+				points_to_give = int(math.Round(float64(float32(pointRate) * stream.OfflineChatPointRate)))
 			}
 		}
 
