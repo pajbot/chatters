@@ -34,3 +34,13 @@ crontab -e
 
 Add the line: (replacing `/srv/go` with whatever your `$GOPATH` value is)
 `*/10 * * * * cd /home/pajlada/chatters; /srv/go/bin/chatters >> /dev/null 2>>/dev/null`
+
+### Alternative: systemd timer
+
+copy `pajbot-chatters.timer` and `pajbot-chatters.service` to `/etc/systemd/system` and run as root (or with `sudo`):
+
+```bash
+systemctl daemon-reload
+systemctl enable pajbot-chatters.timer
+systemctl start pajbot-chatters.timer
+```

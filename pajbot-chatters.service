@@ -1,0 +1,11 @@
+[Unit]
+Description=Update pajbot1 chatters
+
+[Service]
+User=pajbot
+Group=pajbot
+WorkingDirectory=/opt/pajbot-chatters
+ExecStart=/opt/pajbot-chatters/bin/chatters
+
+[Install]
+WantedBy=basic.target
