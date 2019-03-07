@@ -11,7 +11,8 @@
             "__dsn_comment": "This is how to use a mysql unix socket connection",
             "dsn": "pajbot@unix(/var/run/mysqld/mysqld.sock)/pajbot_forsen?charset=utf8mb4",
             "base_points": 2,
-            "base_points_subbed": 5
+            "base_points_subbed": 5,
+            "offline_chat_point_rate": 1
         }
     ]
 }
