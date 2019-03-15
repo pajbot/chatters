@@ -11,7 +11,9 @@
             "__dsn_comment": "This is how to use a mysql unix socket connection",
             "dsn": "pajbot@unix(/var/run/mysqld/mysqld.sock)/pajbot_forsen?charset=utf8mb4",
             "base_points": 2,
-            "base_points_subbed": 5
+            "base_points_subbed": 5,
+            "__offline_chat_point_rate_comment": "This is an optional multiplier for base_points and base_points_subbed for when the channel is offline. (Default is 0)",
+            "offline_chat_point_rate": 0.25
         }
     ]
 }
