@@ -1,9 +1,9 @@
 [Unit]
-Description=Update chatters every 5 minutes
+Description=Update chatters every 10 minutes
 
 [Timer]
 OnBootSec=1min
-OnUnitActiveSec=5min
+OnUnitActiveSec=10min
 Unit=pajbot-chatters.service
 
 [Install]
