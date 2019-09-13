@@ -1,2 +1,4 @@
 chatters
 config.json
+.idea/
+*.exe
