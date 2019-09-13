@@ -111,7 +111,7 @@ INSERT INTO "user"(username, username_raw, level, points, subscriber, minutes_in
      FROM chatters)
 ON CONFLICT (username) DO UPDATE SET
     points = "user".points + round(
-        CASE WHEN "user".subscriber THEN :points_sub_base ELSE :base_points END *
+        CASE WHEN "user".subscriber THEN :base_sub_points ELSE :base_points END *
         CASE WHEN :stream_online THEN 1 ELSE :offline_point_rate END
     ),
     minutes_in_chat_online  = "user".minutes_in_chat_online + CASE WHEN :stream_online THEN :update_interval ELSE 0 END,
