@@ -140,10 +140,13 @@ func handleStream(stream Stream) error {
 
 	// Check online status for streamer
 	res, err := rclient.HGet("stream_data", fmt.Sprintf("%s:online", stream.Streamer)).Result()
-	if err != nil {
+	if err == redis.Nil {
+		stream.Online = false
+	} else if err != nil {
 		return err
+	} else {
+		stream.Online = res == "True"
 	}
-	stream.Online = res == "True"
 
 	// Load chatters JSON data
 	url := fmt.Sprintf("https://tmi.twitch.tv/group/user/%s/chatters", stream.Streamer)
