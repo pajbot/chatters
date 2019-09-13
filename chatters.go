@@ -104,18 +104,18 @@ INSERT INTO "user"(username, username_raw, level, points, subscriber, minutes_in
     (SELECT chatters.username AS username,
             chatters.username AS username_raw,
             100 AS level,
-            $base_points AS points,
+            :base_points AS points,
             FALSE AS subscriber,
-            CASE WHEN $stream_online THEN $update_interval ELSE 0 END AS minutes_in_chat_online,
-            CASE WHEN NOT $stream_online THEN $update_interval ELSE 0 END AS minutes_in_chat_offline
+            CASE WHEN :stream_online THEN :update_interval ELSE 0 END AS minutes_in_chat_online,
+            CASE WHEN NOT :stream_online THEN :update_interval ELSE 0 END AS minutes_in_chat_offline
      FROM chatters)
 ON CONFLICT (username) DO UPDATE SET
     points = "user".points + round(
-        CASE WHEN "user".subscriber THEN $points_sub_base ELSE $base_points END *
-        CASE WHEN $stream_online THEN 1 ELSE $offline_point_rate END
+        CASE WHEN "user".subscriber THEN :points_sub_base ELSE :base_points END *
+        CASE WHEN :stream_online THEN 1 ELSE :offline_point_rate END
     ),
-    minutes_in_chat_online  = "user".minutes_in_chat_online + CASE WHEN $stream_online THEN $update_interval ELSE 0 END,
-    minutes_in_chat_offline = "user".minutes_in_chat_offline + CASE WHEN NOT $stream_online THEN $update_interval ELSE 0 END
+    minutes_in_chat_online  = "user".minutes_in_chat_online + CASE WHEN :stream_online THEN :update_interval ELSE 0 END,
+    minutes_in_chat_offline = "user".minutes_in_chat_offline + CASE WHEN NOT :stream_online THEN :update_interval ELSE 0 END
 `, query_params)
 	if err != nil {
 		return err
