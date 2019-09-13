@@ -91,14 +91,6 @@ func handleUsers(sql_tx *sqlx.Tx, redis_tx redis.Pipeliner, stream Stream, chatt
 		base_sub_points = stream.BasePointsSubbed
 	}
 
-	query_params := map[string]interface{}{
-		"update_interval":    update_interval,
-		"stream_online":      stream_online,
-		"base_points":        base_points,
-		"base_sub_points":    base_sub_points,
-		"offline_point_rate": offline_point_rate,
-	}
-
 	_, err = sql_tx.Exec(`
 INSERT INTO "user"(username, username_raw, level, points, subscriber, minutes_in_chat_online, minutes_in_chat_offline)
     (SELECT chatters.username AS username,
