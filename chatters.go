@@ -69,7 +69,7 @@ func handleUsers(sql_tx *sqlx.Tx, redis_tx redis.Pipeliner, stream Stream, chatt
 
 	for _, chatterCategory := range chatters.Chatters {
 		for _, username := range chatterCategory {
-			_, err := sql_tx.Exec("INSERT INTO chatters VALUES (?)", username)
+			_, err := sql_tx.Exec("INSERT INTO chatters(username) VALUES ($1)", username)
 			if err != nil {
 				return err
 			}
@@ -96,21 +96,19 @@ INSERT INTO "user"(username, username_raw, level, points, subscriber, minutes_in
     (SELECT chatters.username AS username,
             chatters.username AS username_raw,
             100 AS level,
-            ? AS points,
+            $3 AS points,
             FALSE AS subscriber,
-            CASE WHEN ? THEN ? ELSE 0 END AS minutes_in_chat_online,
-            CASE WHEN NOT ? THEN ? ELSE 0 END AS minutes_in_chat_offline
+            CASE WHEN $2 THEN $1 ELSE 0 END AS minutes_in_chat_online,
+            CASE WHEN NOT $2 THEN $1 ELSE 0 END AS minutes_in_chat_offline
      FROM chatters)
 ON CONFLICT (username) DO UPDATE SET
     points = "user".points + round(
-        CASE WHEN "user".subscriber THEN ? ELSE ? END *
-        CASE WHEN ? THEN 1 ELSE ? END
+        CASE WHEN "user".subscriber THEN $4 ELSE $3 END *
+        CASE WHEN $2 THEN 1.0 ELSE $5 END
     ),
-    minutes_in_chat_online  = "user".minutes_in_chat_online + CASE WHEN ? THEN ? ELSE 0 END,
-    minutes_in_chat_offline = "user".minutes_in_chat_offline + CASE WHEN NOT ? THEN ? ELSE 0 END
-`, base_points, stream_online, update_interval, stream_online, update_interval, base_sub_points,
-		base_points, stream_online, offline_point_rate,
-		stream_online, update_interval, stream_online, update_interval)
+    minutes_in_chat_online  = "user".minutes_in_chat_online + CASE WHEN $2 THEN $1 ELSE 0 END,
+    minutes_in_chat_offline = "user".minutes_in_chat_offline + CASE WHEN NOT $2 THEN $1 ELSE 0 END
+`, update_interval, stream_online, base_points, base_sub_points, offline_point_rate)
 	if err != nil {
 		return err
 	}
