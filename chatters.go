@@ -99,24 +99,26 @@ func handleUsers(sql_tx *sqlx.Tx, redis_tx redis.Pipeliner, stream Stream, chatt
 		"offline_point_rate": offline_point_rate,
 	}
 
-	_, err = sql_tx.NamedExec(`
+	_, err = sql_tx.Exec(`
 INSERT INTO "user"(username, username_raw, level, points, subscriber, minutes_in_chat_online, minutes_in_chat_offline)
     (SELECT chatters.username AS username,
             chatters.username AS username_raw,
             100 AS level,
-            :base_points AS points,
+            ? AS points,
             FALSE AS subscriber,
-            CASE WHEN :stream_online THEN :update_interval ELSE 0 END AS minutes_in_chat_online,
-            CASE WHEN NOT :stream_online THEN :update_interval ELSE 0 END AS minutes_in_chat_offline
+            CASE WHEN ? THEN ? ELSE 0 END AS minutes_in_chat_online,
+            CASE WHEN NOT ? THEN ? ELSE 0 END AS minutes_in_chat_offline
      FROM chatters)
 ON CONFLICT (username) DO UPDATE SET
     points = "user".points + round(
-        CASE WHEN "user".subscriber THEN :base_sub_points ELSE :base_points END *
-        CASE WHEN :stream_online THEN 1 ELSE :offline_point_rate END
+        CASE WHEN "user".subscriber THEN ? ELSE ? END *
+        CASE WHEN ? THEN 1 ELSE ? END
     ),
-    minutes_in_chat_online  = "user".minutes_in_chat_online + CASE WHEN :stream_online THEN :update_interval ELSE 0 END,
-    minutes_in_chat_offline = "user".minutes_in_chat_offline + CASE WHEN NOT :stream_online THEN :update_interval ELSE 0 END
-`, query_params)
+    minutes_in_chat_online  = "user".minutes_in_chat_online + CASE WHEN ? THEN ? ELSE 0 END,
+    minutes_in_chat_offline = "user".minutes_in_chat_offline + CASE WHEN NOT ? THEN ? ELSE 0 END
+`, base_points, stream_online, update_interval, stream_online, update_interval, base_sub_points,
+		base_points, stream_online, offline_point_rate,
+		stream_online, update_interval, stream_online, update_interval)
 	if err != nil {
 		return err
 	}
