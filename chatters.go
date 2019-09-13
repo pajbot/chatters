@@ -135,19 +135,19 @@ ON CONFLICT (username) DO UPDATE SET
 	return nil
 }
 
-func handleStream(stream Stream) {
+func handleStream(stream Stream) error {
 	log.Debugf("Loading chatters for %s", stream.Streamer)
 	// Initialize DB Connection for this stream
-	stream.db, _ = sqlx.Connect("postgres", stream.DataSourceName)
-
-	if err := stream.db.Ping(); err != nil {
-		log.Fatal(err)
+	db, err := sqlx.Connect("postgres", stream.DataSourceName)
+	if err != nil {
+		return err
 	}
+	stream.db = db
 
 	// Check online status for streamer
 	res, err := rclient.HGet("stream_data", fmt.Sprintf("%s:online", stream.Streamer)).Result()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	stream.Online = res == "True"
 
@@ -155,20 +155,18 @@ func handleStream(stream Stream) {
 	url := fmt.Sprintf("https://tmi.twitch.tv/group/user/%s/chatters", stream.Streamer)
 	resp, err := httpRequest(url)
 	if err != nil {
-		log.Error(err)
-		return
+		return err
 	}
 	var chatters ChattersList
 	err = json.Unmarshal(resp, &chatters)
 	if err != nil {
-		log.Error(err)
-		return
+		return err
 	}
 
 	// Initialize database transaction
 	err = WithTransaction(stream.db, func(sql_tx *sqlx.Tx) error {
 		// Initialize redis MULTI pipeline
-		_, err = rclient.TxPipelined(func (pipe redis.Pipeliner) error {
+		_, err = rclient.TxPipelined(func(pipe redis.Pipeliner) error {
 			err := handleUsers(sql_tx, pipe, stream, &chatters)
 			if err != nil {
 				return err
@@ -181,20 +179,19 @@ func handleStream(stream Stream) {
 		return nil
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	log.Debugf("Updated data for %d chatters for streamer %s", chatters.ChatterCount, stream.Streamer)
+
+	return nil
 }
 
 func main() {
 	// Initialize logging
-	backend1 := logging.NewLogBackend(os.Stdout, "", 0)
-	backend2 := logging.NewLogBackend(os.Stdout, "", 0)
-	backend2Formatter := logging.NewBackendFormatter(backend2, format)
-	backend1Leveled := logging.AddModuleLevel(backend1)
-	backend1Leveled.SetLevel(logging.ERROR, "")
-	logging.SetBackend(backend1Leveled, backend2Formatter)
+	backend := logging.NewLogBackend(os.Stdout, "", 0)
+	backendFormatter := logging.NewBackendFormatter(backend, format)
+	logging.SetBackend(backendFormatter)
 
 	log.Debug("Starting chatters update")
 
@@ -219,13 +216,19 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(len(config.Streams))
 
+	exitCode := 0
 	for _, stream := range config.Streams {
 		go func(stream Stream) {
 			defer wg.Done()
-			handleStream(stream)
+			err := handleStream(stream)
+			if err != nil {
+				log.Errorf("Error fetching stream data for %s: %s", stream.Streamer, err)
+				exitCode = 1
+			}
 		}(stream)
 	}
 
 	wg.Wait()
 	log.Debug("Done updating chatters")
+	os.Exit(exitCode)
 }
