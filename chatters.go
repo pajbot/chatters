@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
-	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/op/go-logging"
 )
@@ -27,7 +27,7 @@ var (
 type Stream struct {
 	Streamer       string `json:"streamer"`
 	DataSourceName string `json:"dsn"`
-	db             *sqlx.DB
+	db             *sql.DB
 	Online         bool
 
 	BasePoints       int `json:"base_points"`
@@ -61,7 +61,7 @@ func httpRequest(url string) ([]byte, error) {
 	return contents, nil
 }
 
-func handleUsers(sql_tx *sqlx.Tx, redis_tx redis.Pipeliner, stream Stream, chatters *ChattersList) error {
+func handleUsers(sql_tx *sql.Tx, redis_tx redis.Pipeliner, stream Stream, chatters *ChattersList) error {
 	_, err := sql_tx.Exec("CREATE TEMPORARY TABLE chatters(username TEXT PRIMARY KEY NOT NULL) ON COMMIT DROP")
 	if err != nil {
 		return err
@@ -130,7 +130,7 @@ ON CONFLICT (username) DO UPDATE SET
 func handleStream(stream Stream) error {
 	log.Debugf("Loading chatters for %s", stream.Streamer)
 	// Initialize DB Connection for this stream
-	db, err := sqlx.Connect("postgres", stream.DataSourceName)
+	db, err := sql.Open("postgres", stream.DataSourceName)
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func handleStream(stream Stream) error {
 	}
 
 	// Initialize database transaction
-	err = WithTransaction(stream.db, func(sql_tx *sqlx.Tx) error {
+	err = WithTransaction(stream.db, func(sql_tx *sql.Tx) error {
 		// Initialize redis MULTI pipeline
 		_, err = rclient.TxPipelined(func(pipe redis.Pipeliner) error {
 			err := handleUsers(sql_tx, pipe, stream, &chatters)

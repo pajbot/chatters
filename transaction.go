@@ -1,17 +1,17 @@
 package main
 
 import (
-	"github.com/jmoiron/sqlx"
+	"database/sql"
 )
 
 // A TxFn is a function that will be called with the transaction object
 // that can be used for executing statements and queries against a database.
-type TxFn func(tx *sqlx.Tx) error
+type TxFn func(tx *sql.Tx) error
 
 // WithTransaction creates a new transaction and handles rollback/commit based on the
 // error object returned by the `TxFn`
-func WithTransaction(db *sqlx.DB, fn TxFn) (err error) {
-	tx, err := db.Beginx()
+func WithTransaction(db *sql.DB, fn TxFn) (err error) {
+	tx, err := db.Begin()
 	if err != nil {
 		return
 	}
