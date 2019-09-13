@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 	"github.com/op/go-logging"
 	"gopkg.in/redis.v3"
 )
@@ -150,7 +150,7 @@ func handleUsers(sql_tx *sql.Tx, redis_tx *redis.Multi, stream Stream, usernames
 func handleStream(stream Stream) {
 	log.Debugf("Loading chatters for %s", stream.Streamer)
 	// Initialize DB Connection for this stream
-	stream.db, _ = sql.Open("mysql", stream.DataSourceName)
+	stream.db, _ = sql.Open("postgres", stream.DataSourceName)
 
 	if err := stream.db.Ping(); err != nil {
 		log.Fatal(err)
