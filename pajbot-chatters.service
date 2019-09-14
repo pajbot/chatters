@@ -5,7 +5,7 @@ Description=Update pajbot1 chatters
 User=pajbot
 Group=pajbot
 WorkingDirectory=/opt/pajbot-chatters
-ExecStart=/opt/pajbot-chatters/bin/chatters
+ExecStart=/opt/pajbot-chatters/chatters
 
 [Install]
 WantedBy=basic.target
