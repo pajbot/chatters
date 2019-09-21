@@ -5,16 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"math"
 	"net/http"
 	"os"
 	"strconv"
 	"sync"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-redis/redis"
+	_ "github.com/lib/pq"
 	"github.com/op/go-logging"
-	"gopkg.in/redis.v3"
 )
 
 var (
@@ -62,11 +61,27 @@ func httpRequest(url string) ([]byte, error) {
 	return contents, nil
 }
 
-func handleUsers(sql_tx *sql.Tx, redis_tx *redis.Multi, stream Stream, usernames []string) {
+func handleUsers(sql_tx *sql.Tx, redis_tx redis.Pipeliner, stream Stream, chatters *ChattersList) error {
+	_, err := sql_tx.Exec("CREATE TEMPORARY TABLE chatters(username TEXT PRIMARY KEY NOT NULL) ON COMMIT DROP")
+	if err != nil {
+		return err
+	}
+
+	for _, chatterCategory := range chatters.Chatters {
+		for _, username := range chatterCategory {
+			_, err := sql_tx.Exec("INSERT INTO chatters(username) VALUES ($1)", username)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	// The script is currently set to run every 10 minutes
-	interval := 10
+	update_interval := 10
+	stream_online := stream.Online
 	base_points := 2
 	base_sub_points := 10
+	offline_point_rate := stream.OfflineChatPointRate
 
 	if stream.BasePoints > 0 {
 		base_points = stream.BasePoints
@@ -76,136 +91,102 @@ func handleUsers(sql_tx *sql.Tx, redis_tx *redis.Multi, stream Stream, usernames
 		base_sub_points = stream.BasePointsSubbed
 	}
 
-	now := time.Now().Unix()
+	_, err = sql_tx.Exec(`
+INSERT INTO "user"(username, username_raw, level, points, subscriber, minutes_in_chat_online, minutes_in_chat_offline)
+    (SELECT chatters.username AS username,
+            chatters.username AS username_raw,
+            100 AS level,
+            $3 AS points,
+            FALSE AS subscriber,
+            CASE WHEN $2 THEN $1 ELSE 0 END AS minutes_in_chat_online,
+            CASE WHEN NOT $2 THEN $1 ELSE 0 END AS minutes_in_chat_offline
+     FROM chatters)
+ON CONFLICT (username) DO UPDATE SET
+    points = "user".points + round(
+        CASE WHEN "user".subscriber THEN $4 ELSE $3 END *
+        CASE WHEN $2 THEN 1.0 ELSE $5 END
+    ),
+    minutes_in_chat_online  = "user".minutes_in_chat_online + CASE WHEN $2 THEN $1 ELSE 0 END,
+    minutes_in_chat_offline = "user".minutes_in_chat_offline + CASE WHEN NOT $2 THEN $1 ELSE 0 END
+`, update_interval, stream_online, base_points, base_sub_points, offline_point_rate)
+	if err != nil {
+		return err
+	}
+
+	now_formatted := strconv.FormatInt(time.Now().Unix(), 10)
 	last_seen_key := fmt.Sprintf("%s:users:last_seen", stream.Streamer)
 
-	minutes_in_chat_online := 0
-	minutes_in_chat_offline := 0
-
-	if stream.Online {
-		minutes_in_chat_online = interval
-	} else {
-		minutes_in_chat_offline = interval
-	}
-
-	for _, username := range usernames {
-		var id int
-		var subscriber int
-		new := false
-		err := sql_tx.QueryRow("SELECT id, subscriber FROM tb_user WHERE username = ?", username).Scan(&id, &subscriber)
-		if err != nil {
-			new = true
-		}
-
-		// Set last seen
-		redis_tx.HSet(last_seen_key, username, strconv.FormatInt(now, 10))
-
-		points_to_give := 0
-
-		pointRate := base_points
-		if subscriber == 1 {
-			pointRate = base_sub_points
-		}
-
-		if stream.Online {
-			points_to_give = pointRate
-		} else {
-			if stream.OfflineChatPointRate > 0.01 {
-				points_to_give = int(math.Round(float64(float32(pointRate) * stream.OfflineChatPointRate)))
-			}
-		}
-
-		if new {
-			_, err := sql_tx.Exec(
-				"INSERT INTO `tb_user` (`username`, `username_raw`, "+
-					"`level`, `points`, `subscriber`, `minutes_in_chat_online`, "+
-					"`minutes_in_chat_offline`) VALUES (?, ?, 100, ?, 0, ?, ?)",
-				username,
-				username,
-				points_to_give,
-				minutes_in_chat_online,
-				minutes_in_chat_offline)
-			if err != nil {
-				log.Fatal(err)
-			}
-		} else {
-
-			// TODO: Punish trump subs
-			_, err := sql_tx.Exec(
-				"UPDATE `tb_user` SET `points` = `points` + ?, "+
-					"`minutes_in_chat_online` = `minutes_in_chat_online` + ?, "+
-					"`minutes_in_chat_offline` = `minutes_in_chat_offline` + ? "+
-					"WHERE `id` = ?",
-				points_to_give,
-				minutes_in_chat_online,
-				minutes_in_chat_offline,
-				id)
-			if err != nil {
-				log.Fatal(err)
-			}
+	multiset_args := make(map[string]interface{})
+	for _, chatterCategory := range chatters.Chatters {
+		for _, username := range chatterCategory {
+			multiset_args[username] = now_formatted
 		}
 	}
+	redis_tx.HMSet(last_seen_key, multiset_args)
+
+	return nil
 }
 
-func handleStream(stream Stream) {
+func handleStream(stream Stream) error {
 	log.Debugf("Loading chatters for %s", stream.Streamer)
 	// Initialize DB Connection for this stream
-	stream.db, _ = sql.Open("mysql", stream.DataSourceName)
-
-	if err := stream.db.Ping(); err != nil {
-		log.Fatal(err)
+	db, err := sql.Open("postgres", stream.DataSourceName)
+	if err != nil {
+		return err
 	}
+	stream.db = db
 
 	// Check online status for streamer
 	res, err := rclient.HGet("stream_data", fmt.Sprintf("%s:online", stream.Streamer)).Result()
-	if err != nil {
-		log.Fatal(err)
+	if err == redis.Nil {
+		stream.Online = false
+	} else if err != nil {
+		return err
+	} else {
+		stream.Online = res == "True"
 	}
-	stream.Online = res == "True"
 
 	// Load chatters JSON data
 	url := fmt.Sprintf("https://tmi.twitch.tv/group/user/%s/chatters", stream.Streamer)
 	resp, err := httpRequest(url)
 	if err != nil {
-		log.Error(err)
-		return
+		return err
 	}
 	var chatters ChattersList
 	err = json.Unmarshal(resp, &chatters)
 	if err != nil {
-		log.Error(err)
-		return
+		return err
 	}
 
 	// Initialize database transaction
-	sql_tx, err := stream.db.Begin()
+	err = WithTransaction(stream.db, func(sql_tx *sql.Tx) error {
+		// Initialize redis MULTI pipeline
+		_, err = rclient.TxPipelined(func(pipe redis.Pipeliner) error {
+			err := handleUsers(sql_tx, pipe, stream, &chatters)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	// Initialize redis pipeline
-	redis_tx, err := rclient.Watch("stream_data") // XXX: Do I really need to watch something?
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer redis_tx.Close()
-	for _, value := range chatters.Chatters {
-		handleUsers(sql_tx, redis_tx, stream, value)
-	}
-
-	// Commit all data
-	sql_tx.Commit()
 	log.Debugf("Updated data for %d chatters for streamer %s", chatters.ChatterCount, stream.Streamer)
+
+	return nil
 }
 
 func main() {
 	// Initialize logging
-	backend1 := logging.NewLogBackend(os.Stdout, "", 0)
-	backend2 := logging.NewLogBackend(os.Stdout, "", 0)
-	backend2Formatter := logging.NewBackendFormatter(backend2, format)
-	backend1Leveled := logging.AddModuleLevel(backend1)
-	backend1Leveled.SetLevel(logging.ERROR, "")
-	logging.SetBackend(backend1Leveled, backend2Formatter)
+	backend := logging.NewLogBackend(os.Stdout, "", 0)
+	backendFormatter := logging.NewBackendFormatter(backend, format)
+	logging.SetBackend(backendFormatter)
 
 	log.Debug("Starting chatters update")
 
@@ -230,13 +211,19 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(len(config.Streams))
 
+	exitCode := 0
 	for _, stream := range config.Streams {
 		go func(stream Stream) {
 			defer wg.Done()
-			handleStream(stream)
+			err := handleStream(stream)
+			if err != nil {
+				log.Errorf("Error fetching stream data for %s: %s", stream.Streamer, err)
+				exitCode = 1
+			}
 		}(stream)
 	}
 
 	wg.Wait()
 	log.Debug("Done updating chatters")
+	os.Exit(exitCode)
 }

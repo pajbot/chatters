@@ -1,15 +1,9 @@
 {
     "streams": [
         {
-            "streamer": "pajlada",
-            "dsn": "stream:password@/test_pajbot",
-            "base_points": 2,
-            "base_points_subbed": 5
-        },
-        {
             "streamer": "forsen",
-            "__dsn_comment": "This is how to use a mysql unix socket connection",
-            "dsn": "pajbot@unix(/var/run/mysqld/mysqld.sock)/pajbot_forsen?charset=utf8mb4",
+            "__dsn_comment": "Refer to https://godoc.org/github.com/lib/pq#hdr-Connection_String_Parameters for valid options",
+            "dsn": "host=/var/run/postgresql dbname=pajbot sslmode=disable options='-c search_path=pajbot1_forsen'",
             "base_points": 2,
             "base_points_subbed": 5,
             "__offline_chat_point_rate_comment": "This is an optional multiplier for base_points and base_points_subbed for when the channel is offline. (Default is 0)",
