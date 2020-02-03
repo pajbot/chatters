@@ -1,3 +1,6 @@
+# ARCHIVED
+This code has once again moved back into the [pajbot](https://github.com/pajbot/pajbot) project, so this microservice is no longer needed nor in development.
+
 # chatters
 Microservice for [pajbot](https://github.com/pajbot/pajbot) to update chatters.
 
